@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Workflow Diagram</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .container {
+            max-width: 800px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="container bg-white rounded-lg shadow-xl p-8 text-center">
+        <h1 class="text-3xl font-bold text-gray-800 mb-4">RAG Chatbot Workflow Diagram</h1>
+        <p class="text-gray-600 mb-6">
+            Generate a visual representation and an audio explanation of the project workflow.
+        </p>
+
+        <div class="flex flex-col sm:flex-row justify-center gap-4 mb-6">
+            <button id="generateImageBtn" class="bg-blue-500 text-white font-bold py-2 px-6 rounded-full shadow-lg hover:bg-blue-600 transition-colors">
+                Generate Diagram ✨
+            </button>
+            <button id="generateAudioBtn" class="bg-purple-500 text-white font-bold py-2 px-6 rounded-full shadow-lg hover:bg-purple-600 transition-colors">
+                Listen to Explanation ✨
+            </button>
+        </div>
+
+        <div id="loading" class="flex flex-col items-center justify-center p-8 hidden">
+            <div class="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-blue-500 mb-4"></div>
+            <p id="loadingText" class="text-gray-500">Generating...</p>
+        </div>
+
+        <div id="imageContainer" class="hidden">
+            <img id="workflowImage" src="" alt="RAG Workflow Diagram" class="w-full h-auto rounded-lg shadow-md mb-4">
+        </div>
+
+        <div id="audioContainer" class="hidden">
+            <audio id="workflowAudio" controls class="w-full"></audio>
+        </div>
+
+        <div id="errorMessage" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4">
+            <strong class="font-bold">Error!</strong>
+            <span class="block sm:inline" id="errorText"></span>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const generateImageBtn = document.getElementById('generateImageBtn');
+            const generateAudioBtn = document.getElementById('generateAudioBtn');
+            const loadingElement = document.getElementById('loading');
+            const loadingText = document.getElementById('loadingText');
+
+            generateImageBtn.addEventListener('click', generateImage);
+            generateAudioBtn.addEventListener('click', generateAudio);
+        });
+
+        async function generateImage() {
+            const imageContainer = document.getElementById('imageContainer');
+            const workflowImage = document.getElementById('workflowImage');
+            const errorMessage = document.getElementById('errorMessage');
+
+            showLoading("Generating diagram...");
+            imageContainer.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+
+            const prompt = "A clean, modern, and simple workflow diagram for a RAG (Retrieval-Augmented Generation) chatbot. The diagram should show a user with a question, a vector store with documents, an LLM (Large Language Model), and a final chatbot response. The style should be like a flowchart with distinct icons for each step. The steps should be: 1. User Query -> 2. Retrieval from a Vector Database -> 3. Augmentation of the Prompt with retrieved data -> 4. Generation by an LLM -> 5. Final Response.";
+
+            const payload = {
+                instances: {
+                    prompt: prompt
+                },
+                parameters: {
+                    "sampleCount": 1
+                }
+            };
+
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+
+            const maxRetries = 3;
+            let retries = 0;
+            let response = null;
+
+            while (retries < maxRetries) {
+                try {
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        break;
+                    } else if (response.status === 429) {
+                        const delay = Math.pow(2, retries) * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        retries++;
+                    } else {
+                        throw new Error(`API call failed with status: ${response.status}`);
+                    }
+                } catch (e) {
+                    if (retries === maxRetries - 1) {
+                        showError('Failed to generate image after multiple retries. Please try again later.');
+                        return;
+                    }
+                    retries++;
+                }
+            }
+
+            if (!response || !response.ok) {
+                return;
+            }
+
+            try {
+                const result = await response.json();
+                const base64Data = result?.predictions?.[0]?.bytesBase64Encoded;
+
+                if (base64Data) {
+                    const imageUrl = `data:image/png;base64,${base64Data}`;
+                    workflowImage.src = imageUrl;
+                    hideLoading();
+                    imageContainer.classList.remove('hidden');
+                } else {
+                    showError('No image data received from the API.');
+                }
+            } catch (e) {
+                showError('Failed to process the image data.');
+            }
+        }
+
+        async function generateAudio() {
+            const audioContainer = document.getElementById('audioContainer');
+            const workflowAudio = document.getElementById('workflowAudio');
+            const errorMessage = document.getElementById('errorMessage');
+
+            showLoading("Generating audio explanation...");
+            audioContainer.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+
+            const text = "This is a brief summary of the RAG Chatbot project workflow. The process starts with a user asking a question. The system then performs a retrieval step by embedding the question and searching a pre-built vector database of documents for the most relevant information. This retrieved information is then used to augment the original user prompt, providing additional context to the large language model. Finally, the large language model generates a comprehensive and grounded response based on the augmented prompt, which is then presented back to the user.";
+
+            const payload = {
+                contents: [{
+                    parts: [{ text: text }]
+                }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: "Fenrir" }
+                        }
+                    }
+                },
+                model: "gemini-2.5-flash-preview-tts"
+            };
+
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+
+            const maxRetries = 3;
+            let retries = 0;
+            let response = null;
+
+            while (retries < maxRetries) {
+                try {
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        break;
+                    } else if (response.status === 429) {
+                        const delay = Math.pow(2, retries) * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        retries++;
+                    } else {
+                        throw new Error(`API call failed with status: ${response.status}`);
+                    }
+                } catch (e) {
+                    if (retries === maxRetries - 1) {
+                        showError('Failed to generate audio after multiple retries. Please try again later.');
+                        return;
+                    }
+                    retries++;
+                }
+            }
+
+            if (!response || !response.ok) {
+                return;
+            }
+
+            try {
+                const result = await response.json();
+                const part = result?.candidates?.[0]?.content?.parts?.[0];
+                const audioData = part?.inlineData?.data;
+                const mimeType = part?.inlineData?.mimeType;
+
+                if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                    const sampleRate = parseInt(mimeType.match(/rate=(\d+)/)[1], 10);
+                    const pcmData = base64ToArrayBuffer(audioData);
+                    const pcm16 = new Int16Array(pcmData);
+                    const wavBlob = pcmToWav(pcm16, sampleRate);
+                    const audioUrl = URL.createObjectURL(wavBlob);
+                    workflowAudio.src = audioUrl;
+                    hideLoading();
+                    audioContainer.classList.remove('hidden');
+                    workflowAudio.play();
+                } else {
+                    showError('No audio data received from the API.');
+                }
+            } catch (e) {
+                showError('Failed to process the audio data.');
+            }
+        }
+
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function pcmToWav(pcmData, sampleRate) {
+            const numChannels = 1;
+            const bytesPerSample = 2;
+            const headerSize = 44;
+            const buffer = new ArrayBuffer(headerSize + pcmData.byteLength);
+            const view = new DataView(buffer);
+            let offset = 0;
+
+            function writeString(str) {
+                for (let i = 0; i < str.length; i++) {
+                    view.setUint8(offset + i, str.charCodeAt(i));
+                }
+                offset += str.length;
+            }
+
+            function writeUint32(val) {
+                view.setUint32(offset, val, true);
+                offset += 4;
+            }
+
+            function writeUint16(val) {
+                view.setUint16(offset, val, true);
+                offset += 2;
+            }
+
+            writeString('RIFF');
+            writeUint32(36 + pcmData.byteLength);
+            writeString('WAVE');
+            writeString('fmt ');
+            writeUint32(16);
+            writeUint16(1); // PCM format
+            writeUint16(numChannels);
+            writeUint32(sampleRate);
+            writeUint32(sampleRate * numChannels * bytesPerSample);
+            writeUint16(numChannels * bytesPerSample);
+            writeUint16(bytesPerSample * 8);
+            writeString('data');
+            writeUint32(pcmData.byteLength);
+
+            const pcmBytes = new Uint8Array(pcmData.buffer);
+            for (let i = 0; i < pcmBytes.length; i++) {
+                view.setUint8(offset + i, pcmBytes[i]);
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+        function showLoading(text) {
+            const loadingElement = document.getElementById('loading');
+            const loadingText = document.getElementById('loadingText');
+            loadingText.textContent = text;
+            loadingElement.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            const loadingElement = document.getElementById('loading');
+            loadingElement.classList.add('hidden');
+        }
+
+        function showError(message) {
+            const loadingElement = document.getElementById('loading');
+            const errorMessage = document.getElementById('errorMessage');
+            const errorText = document.getElementById('errorText');
+
+            hideLoading();
+            errorMessage.classList.remove('hidden');
+            errorText.textContent = message;
+        }
+    </script>
+</body>
+</html>
